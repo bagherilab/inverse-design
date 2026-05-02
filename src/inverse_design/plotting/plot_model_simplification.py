@@ -161,7 +161,11 @@ def draw_scatter_panels(
             zorder=10,
         )
 
-        ax.set_xlabel(sentence_case_name(pred_col), fontsize=font_size)
+        ax.set_xlabel(
+            sentence_case_name(pred_col),
+            fontsize=font_size,
+            fontweight="bold",
+        )
         ax.set_ylabel(sentence_case_name(tgt_col), fontsize=font_size)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
