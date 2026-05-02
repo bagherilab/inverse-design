@@ -5,12 +5,12 @@ description = ""
 authors = ["pohaoc2 <pohaoc2@uw.edu>"]
 readme = "README.md"
 packages = [{ include = "inverse_design", from = "src" }]
+include = [{ path = "src/inverse_design/sample_inputs/*.xml", format = ["sdist", "wheel"] }]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 matplotlib = "^3.10.0"
 hydra-core = "^1.3.2"
-black = "^24.10.0"
 scipy = "^1.15.1"
 pandas = "^2.2.3"
 pylint = "^3.3.3"
@@ -28,17 +28,13 @@ networkx = "<3.5"
 PyYAML = "^6.0.1"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.3.0"
+pytest = ">=9.0.3,<10.0.0"
 ruff = "^0.11.11"
 pip-audit = "^2.8.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-
-[tool.black]
-line-length = 100
-target-version = ["py310"]
 
 [tool.ruff]
 line-length = 100

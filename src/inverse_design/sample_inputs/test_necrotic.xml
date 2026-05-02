@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='utf-8'?>
+<set prefix="combined_">
+    <series name="grid" start="5" end="5" ticks="20160" interval="1400" radius="20" margin="4" depth="1">
+        <patch>
+            <patch.parameter id="GEOMETRY" value="hex" />
+        </patch>
+        <agents>
+            <populations>
+                <population id="cancerous" init="19" class="cancer">
+                    <population.parameter id="CELL_VOLUME" value="NORMAL(MU=1186.6,SIGMA=167.7)" />
+                    <population.parameter id="APOPTOSIS_AGE" value="NORMAL(MU=120960.0,SIGMA=6000.0)" />
+                    <population.parameter id="NECROTIC_FRACTION" value="0.784" />
+                    <population.parameter id="ACCURACY" value="0.766" />
+                    <population.parameter id="AFFINITY" value="0.800" />
+                    <population.parameter id="COMPRESSION_TOLERANCE" value="6.476" />
+
+                    <population.parameter id="CELL_AGE" value="UNIFORM(MIN=0,MAX=0)" />
+                    <population.process id="METABOLISM" version="complex" />
+                    <population.process id="SIGNALING" version="complex" />
+                    <population.parameter id="proliferation/SYNTHESIS_DURATION" value="NORMAL(MU=613.7,SIGMA=22.3)" />
+                    <population.parameter id="metabolism/BASAL_ENERGY" value="NORMAL(MU=0.000965,SIGMA=0.000083)" />
+                    <population.parameter id="metabolism/PROLIFERATION_ENERGY" value="NORMAL(MU=0.000753,SIGMA=0.000066)" />
+                    <population.parameter id="metabolism/MIGRATION_ENERGY" value="NORMAL(MU=0.000273,SIGMA=0.000009)" />
+                    <population.parameter id="metabolism/METABOLIC_PREFERENCE" value="NORMAL(MU=0.332425,SIGMA=0.011134)" />
+                    <population.parameter id="metabolism/CONVERSION_FRACTION" value="NORMAL(MU=0.238778,SIGMA=0.009244)" />
+                    <population.parameter id="metabolism/RATIO_GLUCOSE_PYRUVATE" value="NORMAL(MU=0.548849,SIGMA=0.040473)" />
+                    <population.parameter id="metabolism/LACTATE_RATE" value="NORMAL(MU=0.057670,SIGMA=0.006875)" />
+                    <population.parameter id="metabolism/AUTOPHAGY_RATE" value="NORMAL(MU=0.000126,SIGMA=0.000001)" />
+                    <population.parameter id="metabolism/GLUCOSE_UPTAKE_RATE" value="NORMAL(MU=1.559392,SIGMA=0.087798)" />
+                    <population.parameter id="metabolism/ATP_PRODUCTION_RATE" value="NORMAL(MU=7.584129,SIGMA=0.360228)" />
+                    <population.parameter id="signaling/MIGRATORY_THRESHOLD" value="NORMAL(MU=9.819,SIGMA=0.443)" />
+                </population>
+            </populations>
+        </agents>
+        <environments>
+            <layers>
+               <layer id="GLUCOSE">
+                    <layer.parameter id="INITIAL_CONCENTRATION" value="0.009997417761944235" />
+                    <layer.parameter id="DIFFUSIVITY" operation="diffuser" value="39.0" />
+                    <layer.parameter id="CONCENTRATION" operation="generator" value="0.009997417761944235" units="fmol/um^3" description="equal to 5 umol/cm^3" />
+                    <layer.operation id="GENERATOR" />
+                    <layer.operation id="DIFFUSER" />
+                </layer>
+                <layer id="OXYGEN">
+                    <layer.parameter id="INITIAL_CONCENTRATION" value="51.37877680361271" />
+                    <layer.parameter id="DIFFUSIVITY" operation="diffuser" value="2000.0" />
+                    <layer.parameter id="CONCENTRATION" operation="generator" value="51.37877680361271" units="mmHg" />
+                    <layer.operation id="DIFFUSER" />
+                    <layer.operation id="GENERATOR" />
+                </layer>
+                <layer id="TGFA">
+                    <layer.parameter id="INITIAL_CONCENTRATION" value="150" />
+                    <layer.parameter id="DIFFUSIVITY" operation="diffuser" value="51.8" />
+                    <layer.operation id="DIFFUSER" />
+                </layer>
+            </layers>
+            <components>
+                <component id="SITES" class="source_sites">
+                    <component.register id="GLUCOSE" />
+                    <component.register id="OXYGEN" />
+                    <component.parameter id="X_SPACING" value="*:2" />
+                    <component.parameter id="Y_SPACING" value="*:4" />
+                </component>
+            </components>
+        </environments>
+    </series>
+</set>

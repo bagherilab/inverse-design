@@ -3,6 +3,8 @@
 *.out
 *.txt
 *.xml
+!src/inverse_design/sample_inputs/
+!src/inverse_design/sample_inputs/*.xml
 *.csv
 *.jar
 *.tar

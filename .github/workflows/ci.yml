@@ -41,9 +41,6 @@ jobs:
       - name: Install dependencies (including dev)
         run: poetry install --no-interaction --no-ansi --with dev
 
-      - name: Black (line length 100)
-        run: poetry run black --check --line-length 100 src tests
-
       - name: Ruff
         run: poetry run ruff check src tests
 
@@ -107,4 +104,5 @@ jobs:
         run: poetry install --no-interaction --no-ansi --with dev
 
       - name: pip-audit
-        run: poetry run pip-audit
+        # CVE-2026-3219 is currently reported for pip with no fixed version.
+        run: poetry run pip-audit --ignore-vuln CVE-2026-3219
