@@ -4,7 +4,15 @@
 ¹ Department of Chemical Engineering, University of Washington, Seattle, WA 98195, USA
 ² Department of Biology, University of Washington, Seattle, WA 98195, USA
 
-Zenodo: [10.5281/zenodo.19963226](https://doi.org/10.5281/zenodo.19963226)
+[![CI](https://github.com/bagherilab/inverse-design/actions/workflows/ci.yml/badge.svg)](https://github.com/bagherilab/inverse-design/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Poetry](https://img.shields.io/badge/package-Poetry-60A5FA.svg)](https://python-poetry.org/)
+[![Code style: Black](https://img.shields.io/badge/code%20style-Black-000000.svg)](https://github.com/psf/black)
+[![Lint: Ruff](https://img.shields.io/badge/lint-Ruff-46A2F1.svg)](https://docs.astral.sh/ruff/)
+[![Lint: Pylint](https://img.shields.io/badge/pylint-%E2%89%A58.0-yellowgreen.svg)](https://pylint.pycqa.org/)
+[![Tests: Pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)](https://docs.pytest.org/)
+[![Coverage](https://codecov.io/gh/bagherilab/inverse-design/graph/badge.svg)](https://codecov.io/gh/bagherilab/inverse-design)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19963226.svg)](https://doi.org/10.5281/zenodo.19963226)
 
 ---
 
