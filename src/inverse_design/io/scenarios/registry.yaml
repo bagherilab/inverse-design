@@ -1,0 +1,42 @@
+# Canonical experiment output roots (relative paths as used in legacy scripts).
+# Consumed by combined_grid_n512_breast() in analyze/scenarios/load.py (parameter_importance, vis_simplified).
+
+experiments:
+  combined_grid_n512_breast:
+    base_original_dir: ../../../ARCADE_OUTPUT/ABC_SMC_RF_N1024_combined_grid_breast_only_mean_2
+    linear_model_dirs:
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.9_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.8_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.7_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.9_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.8_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.7_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.9_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.8_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.7_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.9_p4_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.8_p4_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.7_p4_mean_only
+    dendrogram_threshold_dirs:
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.0_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.25_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.5_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.0_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.25_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.5_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.0_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.25_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.5_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.0_p4_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.25_p4_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_1.5_p4_mean_only
+    ext_linear_dirs:
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.01_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.01_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.01_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_linear_0.01_p4_mean_only
+    ext_dendrogram_threshold_dirs:
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_5.0_p1_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_5.0_p2_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_5.0_p3_mean_only
+      - ../../../ARCADE_OUTPUT/ABC_SMC_RF_N512_combined_grid_dendrogram_5.0_p4_mean_only

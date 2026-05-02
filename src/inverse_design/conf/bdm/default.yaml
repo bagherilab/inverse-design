@@ -1,0 +1,18 @@
+# Model parameters for Birth-Death-Migration simulation
+verbose: true
+
+lattice:
+  size: 25
+  initial_density: 0.05
+
+rates:
+  proliferate: 0.01061848501674831
+  death: 0.002073881044983864
+  migrate: 0.18046982819214463
+
+output:
+  frequency: 100.0
+  max_time: 2500.0
+
+metrics:
+  equilibrium_threshold: 0.05

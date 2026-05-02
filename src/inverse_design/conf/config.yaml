@@ -1,0 +1,141 @@
+defaults:
+  - bdm: default
+  - abc: default
+  - _self_
+
+# You can override specific values here
+
+bdm:
+  verbose: false
+  lattice:
+    size: 25
+  output:
+    frequency: 100.0
+    max_time: 2000.0
+
+arcade:
+  cellular:
+    volume_mu: 2250
+    volume_sigma: 200
+    apop_age_mu: 120960
+    apop_age_sigma: 10080
+    necrotic_fraction: 0.5
+    accuracy: 0.8
+    affinity: 0.5
+    compression_tolerance: 0
+  output:
+    frequency: 100.0
+    max_time: 14400.0
+
+abc:
+  output_frequency: 100
+  epsilon: 0.033
+  sobol_power: 1
+  model_type: "ARCADE"
+  targets:
+    - metric: "doubling_time"
+      value: 30
+      weight: 1.0
+    - metric: "activity"
+      value: 0.8
+      weight: 1.0
+    - metric: "colony_growth_rate"
+      value: 1.2
+      weight: 1.0
+  parameter_ranges:
+    CELL_VOLUME_MU:
+      min: 2000.0
+      max: 2500.0
+    CELL_VOLUME_SIGMA:
+      min: 50.0
+      max: 250.0
+    APOPTOSIS_AGE_MU:
+      min: 120960.0
+      max: 120960.0
+    APOPTOSIS_AGE_SIGMA:
+      min: 6000.0
+      max: 6000.0
+    NECROTIC_FRACTION:
+      min: 1.0
+      max: 1.0
+    ACCURACY:
+      min: 0.3
+      max: 1.0
+    AFFINITY:
+      min: 0.0
+      max: 1.0
+    COMPRESSION_TOLERANCE:
+      min: 3.0
+      max: 10.0
+    SYNTHESIS_DURATION_MU:
+      min: 580.0
+      max: 680.0
+    SYNTHESIS_DURATION_SIGMA:
+      min: 20.0
+      max: 70.0
+    BASAL_ENERGY_MU:
+      min: 0.0008
+      max: 0.0012
+    BASAL_ENERGY_SIGMA:
+      min: 6e-05
+      max: 0.0001
+    PROLIFERATION_ENERGY_MU:
+      min: 0.0008
+      max: 0.0012
+    PROLIFERATION_ENERGY_SIGMA:
+      min: 6e-05
+      max: 0.0001
+    MIGRATION_ENERGY_MU:
+      min: 0.00016
+      max: 0.00024
+    MIGRATION_ENERGY_SIGMA:
+      min: 1.2e-05
+      max: 2e-05
+    METABOLIC_PREFERENCE_MU:
+      min: 0.24
+      max: 0.36
+    METABOLIC_PREFERENCE_SIGMA:
+      min: 0.019
+      max: 0.029
+    CONVERSION_FRACTION_MU:
+      min: 0.2
+      max: 0.3
+    CONVERSION_FRACTION_SIGMA:
+      min: 0.016
+      max: 0.024
+    RATIO_GLUCOSE_PYRUVATE_MU:
+      min: 0.4
+      max: 0.6
+    RATIO_GLUCOSE_PYRUVATE_SIGMA:
+      min: 0.032
+      max: 0.048
+    LACTATE_RATE_MU:
+      min: 0.08
+      max: 0.12
+    LACTATE_RATE_SIGMA:
+      min: 0.006
+      max: 0.01
+    AUTOPHAGY_RATE_MU:
+      min: 8e-05
+      max: 0.00012
+    AUTOPHAGY_RATE_SIGMA:
+      min: 6e-06
+      max: 1e-05
+    GLUCOSE_UPTAKE_RATE_MU:
+      min: 0.9
+      max: 1.34
+    GLUCOSE_UPTAKE_RATE_SIGMA:
+      min: 0.072
+      max: 0.107
+    ATP_PRODUCTION_RATE_MU:
+      min: 7.14
+      max: 10.71
+    ATP_PRODUCTION_RATE_SIGMA:
+      min: 0.57
+      max: 0.86
+    MIGRATORY_THRESHOLD_MU:
+      min: 8.0
+      max: 12.0
+    MIGRATORY_THRESHOLD_SIGMA:
+      min: 0.64
+      max: 0.96

@@ -1,0 +1,25 @@
+epsilon: 0.05
+output_frequency: 100
+sobol_power: 5.0
+para_file: "para_file.csv"
+metrics_file: "metrics_file.csv"
+output_dir: abc_results/
+model_type: "BDM"
+parameter_ranges:
+  proliferate:
+    min: 0.01
+    max: 0.02
+  death:
+    min: 0.001
+    max: 0.005
+  migrate:
+    min: 0.15
+    max: 0.25
+
+targets:
+  - metric: "density"
+    value: 70.0
+    weight: 1.0
+  - metric: "time_to_equilibrium"
+    value: 1400.0
+    weight: 1.0
