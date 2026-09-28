@@ -74,7 +74,15 @@ def run_simulations(
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler("simulation_run.log"), logging.StreamHandler(sys.stdout)],
+        handlers=[
+            # Relative path resolves against the process cwd, which is inside the
+            # read-only image when running under apptainer --pwd. DED_LOG_DIR lets
+            # callers point it at writable storage.
+            logging.FileHandler(
+                os.path.join(os.environ.get("DED_LOG_DIR", "."), "simulation_run.log")
+            ),
+            logging.StreamHandler(sys.stdout),
+        ],
     )
 
     input_dir = Path(input_dir)

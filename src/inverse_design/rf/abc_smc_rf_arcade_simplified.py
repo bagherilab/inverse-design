@@ -9,6 +9,7 @@ import concurrent.futures
 import tempfile
 import os
 import re
+import sys
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -17,6 +18,7 @@ from inverse_design.rf.drf import DRF
 from inverse_design.examples.run_simulations import run_simulations
 from inverse_design.common.enum import Target
 from inverse_design.rf.abc_smc_rf_base import ABCSMCRFBase
+from inverse_design.rf.shard_support import prune_incomplete_outputs
 from inverse_design.utils.s3_utils import (
     ensure_dir_exists,
     path_exists,
@@ -39,6 +41,7 @@ class ABCSMCRF(ABCSMCRFBase):
         self,
         n_iterations: int = 5,
         sobol_power: int = 2,
+        n_particles: Optional[int] = None,
         rf_type: Literal["RF", "DRF"] = "DRF",
         n_trees: int = 500,
         min_samples_leaf: int = 5,
@@ -91,6 +94,8 @@ class ABCSMCRF(ABCSMCRFBase):
             n_iterations, rf_type, n_trees, min_samples_leaf, n_try, random_state, criterion
         )
         self.sobol_power = sobol_power
+        # Particle count; falls back to 2**sobol_power when unset.
+        self.n_particles = n_particles
         self.param_ranges = param_ranges
         self.subsample_ratio = subsample_ratio
         self.perturbation_kernel = (
@@ -164,8 +169,13 @@ class ABCSMCRF(ABCSMCRFBase):
         """Run ARCADE simulations in parallel."""
         from inverse_design.examples.run_simulations import run_simulations
 
-        all_output_names = [f"input_{i}" for i in range(1, 2**self.sobol_power + 1)]
+        all_output_names = [f"input_{i}" for i in range(1, self.n_samples + 1)]
         if path_exists(output_dir):
+            if not is_s3_path(output_dir):
+                # A job killed mid-simulation leaves a directory that exists but
+                # holds a truncated trajectory; without this it would be counted
+                # as finished. See shard_support for why this matters.
+                prune_incomplete_outputs(output_dir, input_dir)
             current_output_names = list_files(output_dir + "/inputs", "input_*")
             missing_output_indices = [
                 int(f.split("_")[-1].split(".")[0])
@@ -174,16 +184,54 @@ class ABCSMCRF(ABCSMCRFBase):
             ]
             if len(missing_output_indices) == 0:
                 print(
-                    f"ARCADE simulations for {output_dir} already exist, and have {len(current_output_names)} outputs (target = {2 ** self.sobol_power}), skipping generation"
+                    f"ARCADE simulations for {output_dir} already exist, and have {len(current_output_names)} outputs (target = {self.n_samples}), skipping generation"
                 )
                 return
             else:
                 print(
-                    f"ARCADE simulations for {output_dir} exist but have {len(current_output_names)} outputs, expected {2 ** self.sobol_power}"
+                    f"ARCADE simulations for {output_dir} exist but have {len(current_output_names)} outputs, expected {self.n_samples}"
                 )
         else:
             ensure_dir_exists(output_dir)
-            missing_output_indices = list(range(1, 2**self.sobol_power + 1))
+            missing_output_indices = list(range(1, self.n_samples + 1))
+
+        if os.environ.get("DED_PREPARE_ONLY"):
+            # Sharded mode: this process exists only to replay finished
+            # generations and lay down the next generation's inputs. The
+            # simulations themselves belong to the shard jobs, so stop here
+            # rather than running 5000 of them on one node.
+            print(
+                f"DED_PREPARE_ONLY: {output_dir} needs "
+                f"{len(missing_output_indices)} simulations; leaving them to the "
+                f"shard jobs and exiting."
+            )
+            logging.info(
+                "DED_PREPARE_ONLY stop: iteration=%d pending=%d output_dir=%s",
+                self.current_iteration,
+                len(missing_output_indices),
+                output_dir,
+            )
+            marker = os.environ.get("DED_PREPARE_MARKER")
+            if marker:
+                # The submitting script needs to know which generation to hand
+                # to the shards; parsing it back out of the log would be
+                # fragile.
+                import json
+
+                with open(marker, "w") as handle:
+                    json.dump(
+                        {
+                            "iteration": self.current_iteration,
+                            "input_dir": input_dir,
+                            "output_dir": output_dir,
+                            "pending": len(missing_output_indices),
+                            "n_particles": self.n_samples,
+                        },
+                        handle,
+                    )
+            sys.stdout.flush()
+            raise SystemExit(0)
+
         # Run simulations
 
         run_simulations(
@@ -193,6 +241,13 @@ class ABCSMCRF(ABCSMCRFBase):
             max_workers=self.n_cpu,
             running_index=missing_output_indices,
         )
+
+    @property
+    def n_samples(self) -> int:
+        """Particles per generation: the override if given, else 2**sobol_power."""
+        if self.n_particles is not None:
+            return self.n_particles
+        return 2**self.sobol_power
 
     def fit(
         self,
@@ -226,6 +281,15 @@ class ABCSMCRF(ABCSMCRFBase):
         self.target_values = target_values
         self.n_statistics = len(target_names)
         self.peak_name = peak_name
+        # Only the plain ABCSMCRF records resampling lineage and per-generation
+        # ESS. Reaching here means a run selected this class instead, and the
+        # provenance needed to judge whether posterior modes are real will be
+        # missing afterwards, with nothing in the output to show for it.
+        logging.warning(
+            "This class does not record lineage or ESS. Runs that need "
+            "ancestor tracing must use the plain ABCSMCRF (simplify_model=false) "
+            "or the same recording must be added here."
+        )
         for t in range(self.n_iterations):
             self.current_iteration = t
             logging.info(f"Running ABC-SMC-RF iteration {t+1}/{self.n_iterations}")
@@ -293,7 +357,7 @@ class ABCSMCRF(ABCSMCRFBase):
             [f for f in Path(output_dir + dir_postfix).glob("inputs/input_*")],
             key=lambda x: int(re.search(r"input_(\d+)", x.name).group(1)),
         )
-        sim_folders = sim_folders[: 2**self.sobol_power]
+        sim_folders = sim_folders[: self.n_samples]
         if not path_exists(f"{output_dir}/{dir_postfix}/final_metrics.csv"):
             metrics_calculator = SimulationMetrics(
                 output_dir + dir_postfix, input_dir + dir_postfix
@@ -379,7 +443,7 @@ class ABCSMCRF(ABCSMCRFBase):
         prev_weights = self.weights[-1]
 
         # Generate candidate parameters
-        n_candidates = 2**self.sobol_power
+        n_candidates = self.n_samples
         parameters = np.zeros((n_candidates, prev_parameters.shape[1]), dtype=object)
 
         i = 0
@@ -556,7 +620,7 @@ class ABCSMCRF(ABCSMCRFBase):
         """
         if self.rf_type == "RF":
             # Combine weights from separate RF models
-            combined_weights = np.ones(self.n_particles)
+            combined_weights = np.ones(self.n_samples)
 
             for p, model in enumerate(self.rf_models[t]):
                 weights_p = model.predict_weights(self.observed_statistics)

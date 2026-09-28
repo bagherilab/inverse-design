@@ -21,5 +21,7 @@
     "base_dir": "../../data/N1024_breast_only_mean_2",
     "base_s3_dir": "s3://bagherilab-working/pohao/arcade",
     "base_input_dir": "/gscratch/cheme/chiu/ARCADE_INPUT",
-    "base_output_dir": "/gscratch/cheme/chiu/ARCADE_OUTPUT"
-} 
+    "base_output_dir": "/gscratch/cheme/chiu/ARCADE_OUTPUT",
+    "run_name": "ABC_SMC_RF_N1024_combined_grid_breast_only_mean_2",
+    "simplify_method": "linear"
+}

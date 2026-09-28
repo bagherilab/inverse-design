@@ -1,4 +1,6 @@
-FROM python:3.11-slim
+# Pinned to bookworm: the unpinned python:3.11-slim now tracks Debian trixie,
+# which dropped openjdk-17-jdk. Java 17 is what produced the published runs.
+FROM python:3.11-slim-bookworm
 
 # Install Java (if your Python script calls Java simulation)
 RUN apt-get update && apt-get install -y \
@@ -7,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Java environment
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 
 # Install Poetry

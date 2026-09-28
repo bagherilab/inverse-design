@@ -30,7 +30,11 @@ from inverse_design.utils.s3_utils import (
     read_csv,
     upload_file_to_s3,
 )
-from inverse_design.utils.utils import zip_directory
+from inverse_design.utils.utils import archive_directory
+from inverse_design.utils.create_input_files import (
+    _num_sobol_samples,
+    set_particle_count,
+)
 from inverse_design.analyze.lr_predictor import CorrelationPredictor
 from inverse_design.analyze.analyze_param_correlation import (
     analyze_peak_pairwise_correlations,
@@ -73,6 +77,9 @@ def load_config(config_path):
     # Set defaults for missing values
     defaults = {
         "sobol_power": 9,
+        "n_particles": None,  # overrides 2**sobol_power when set
+        "run_name": None,  # overrides the derived output/input directory name
+        "simplify_method": "linear",  # read unconditionally, even when simplify_model is false
         "n_group": 3,
         "n_min_sample": 5,
         "radius": 10,
@@ -159,11 +166,46 @@ def prior_pdf(params, param_columns, param_ranges, config_params=None):
     return 1.0 / (max_val - min_val)
 
 
+_KERNEL_SCALE_LOGGED = set()
+
+
+def _kernel_scale_factor(iteration, max_iterations):
+    """Perturbation width for generation `iteration`.
+
+    The published schedule is max(0.01, 0.1 * (1 - t / T)) with T the total
+    generation count. Because T is also the loop bound, resuming a finished run
+    at a larger T re-widens the kernel at the join. DED_KERNEL_SCHEDULE overrides
+    the formula with an explicit comma-separated list indexed from t = 1, so a
+    continuation can keep contracting. Iterations past the end of the list fall
+    back to the formula, and an unset or empty variable reproduces the published
+    behaviour exactly.
+    """
+    raw = os.environ.get("DED_KERNEL_SCHEDULE", "").strip()
+    source = "published formula"
+    value = max(0.01, 0.1 * (1 - iteration / max_iterations))
+    if raw:
+        for _sep in (";", ":", " "):
+            raw = raw.replace(_sep, ",")
+        schedule = [float(x) for x in raw.split(",") if x.strip()]
+        if 1 <= iteration <= len(schedule):
+            value = schedule[iteration - 1]
+            source = "DED_KERNEL_SCHEDULE"
+        else:
+            source = "published formula (past end of DED_KERNEL_SCHEDULE)"
+    if iteration not in _KERNEL_SCALE_LOGGED:
+        _KERNEL_SCALE_LOGGED.add(iteration)
+        logging.info(
+            "iteration %d: perturbation scale_factor %.6g from %s",
+            iteration, value, source,
+        )
+    return value
+
+
 def perturbation_kernel(
     params, param_columns, param_ranges, iteration=1, max_iterations=5, seed=42, config_params=None
 ):
     perturbed_params = params.copy()
-    scale_factor = max(0.01, 0.1 * (1 - iteration / max_iterations))
+    scale_factor = _kernel_scale_factor(iteration, max_iterations)
     # Match the param_ranges with the parameter columns
     param_ranges = {col_name: param_ranges[col_name] for col_name in param_columns}
     if len(params) != len(param_ranges):
@@ -295,7 +337,7 @@ def plot_parameter_iterations(smc_rf, param_names, sobol_power=8, plot_kde=False
     from scipy.stats import qmc
 
     sampler = qmc.Sobol(d=len(param_names), seed=42)
-    n_samples = 2**sobol_power
+    n_samples = _num_sobol_samples(sobol_power)
 
     for idx, param_name in enumerate(param_names):
         param_idx = smc_rf.parameter_columns.index(param_name)
@@ -550,7 +592,7 @@ def run_example(config, target_names, target_values):
             "side_length": side_length,
         },
     ]
-    n_samples = 2**sobol_power
+    n_samples = _num_sobol_samples(sobol_power)
     config_params = input_configs[2]
     if config_params["perturbed_config"] == "cellular":
         param_ranges = PARAM_RANGES.copy()
@@ -678,9 +720,23 @@ def run_example(config, target_names, target_values):
         param_ranges = {k: v for k, v in param_ranges.items() if v[0] != v[1]}
         analysis_results = None
         chain_analysis = None
+
+    # An explicit run_name overrides the name derived above. The derived name
+    # encodes only particle count, perturbed config and source type, so it
+    # cannot address runs whose directories carry extra qualifiers (the
+    # published breast run is ABC_SMC_RF_N1024_combined_grid_breast_only_mean_2).
+    # Without this, resuming such a run silently starts a fresh one instead.
+    # Output keeps the given case; input follows the existing lowercase convention.
+    run_name = config["run_name"]
+    if run_name:
+        input_dir = f"{base_input_dir}/{run_name.lower()}/"
+        output_dir = f"{base_output_dir}/{run_name}/"
+        logging.info("run_name override: output=%s", output_dir)
+
     smc_rf_configs = {
         "n_iterations": config["n_iterations"],
         "sobol_power": sobol_power,
+        "n_particles": config["n_particles"],
         "rf_type": config["rf_type"],
         "n_trees": config["n_trees"],
         "min_samples_leaf": config["min_samples_leaf"],
@@ -724,17 +780,27 @@ def run_example(config, target_names, target_values):
     )
     # Upload the results to S3
     if base_s3_dir:
-        # zip the output and input directories
-        input_dir_zip = zip_directory(input_dir, f"{input_dir[:-1]}.zip")
-        output_dir_zip = zip_directory(output_dir, f"{output_dir[:-1]}.zip")
-        # upload the zipped directories to S3
+        # Archive the input and output trees. The raw per-simulation ARCADE
+        # dumps are deliberately left out of the output archive: they are ~33 GB
+        # per generation, and the input XML pins every parameter value and the
+        # seed range, so ARCADE v3.3.0 regenerates them exactly. What is kept is
+        # what the analysis actually rests on -- the derived CSVs, the weights
+        # and ess.json -- which is a few megabytes per generation.
+        raw_arcade_output = ["*.CELLS.json", "*.LOCATIONS.json"]
+        input_dir_zip = archive_directory(input_dir)
+        output_dir_zip = archive_directory(output_dir, exclude=raw_arcade_output)
+        stem = f"{config_params['perturbed_config']}_{source_type}_{simplify_method}_{correlation_threshold}_p{config_peak_name.split()[1]}"
+        # The extension follows whichever archiver was available, so take it
+        # from the produced file rather than assuming .zip.
+        input_suffix = input_dir_zip[input_dir_zip.index(".", input_dir_zip.rfind("/")) :]
+        output_suffix = output_dir_zip[output_dir_zip.index(".", output_dir_zip.rfind("/")) :]
         upload_file_to_s3(
             file_path=input_dir_zip,
-            s3_destination=f"{base_s3_dir}/ARCADE_INPUT/abc_smc_rf_n{n_samples}_{config_params['perturbed_config']}_{source_type}_{simplify_method}_{correlation_threshold}_p{config_peak_name.split()[1]}.zip",
+            s3_destination=f"{base_s3_dir}/ARCADE_INPUT/abc_smc_rf_n{n_samples}_{stem}{input_suffix}",
         )
         upload_file_to_s3(
             file_path=output_dir_zip,
-            s3_destination=f"{base_s3_dir}/ARCADE_OUTPUT/ABC_SMC_RF_N{n_samples}_{config_params['perturbed_config']}_{source_type}_{simplify_method}_{correlation_threshold}_p{config_peak_name.split()[1]}.zip",
+            s3_destination=f"{base_s3_dir}/ARCADE_OUTPUT/ABC_SMC_RF_N{n_samples}_{stem}{output_suffix}",
         )
         print(f"ABC-SMC-DRF completed in {time.time() - start_time:.2f} seconds")
         return
@@ -891,6 +957,15 @@ if __name__ == "__main__":
 
     # Load configuration and targets
     config = load_config(args.config)
+    # Decouple the particle count from 2**sobol_power when the config asks for it.
+    set_particle_count(config["n_particles"])
+    if config["n_particles"] is not None:
+        logging.info(
+            "Particle count overridden to %d (sobol_power=%d would give %d)",
+            config["n_particles"],
+            config["sobol_power"],
+            2 ** config["sobol_power"],
+        )
     target_names, target_values = load_targets(args.target)
 
     # Run the example

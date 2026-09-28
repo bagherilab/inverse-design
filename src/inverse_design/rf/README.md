@@ -94,7 +94,7 @@ aws batch register-job-definition \
     --job-definition-name inverse-design \
     --type container \
     --container-properties '{
-        "image": "994441203305.dkr.ecr.us-west-2.amazonaws.com/inverse-design-simulation:latest",
+        "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/inverse-design-simulation:latest",
         "vcpus": 4,
         "memory": 8192,
         "command": ["python3", "src/rf/arcade_example.py", "Ref::args"]
@@ -120,15 +120,15 @@ aws batch create-compute-environment \
         "instanceTypes": ["optimal"],
         "subnets": ["subnet-758d550d"],
         "securityGroupIds": ["sg-bf1c1393"],
-        "instanceRole": "arn:aws:iam::994441203305:instance-profile/ec2_default"
+        "instanceRole": "arn:aws:iam::<AWS_ACCOUNT_ID>:instance-profile/ec2_default"
     }' \
-    --service-role arn:aws:iam::994441203305:role/ec2_default \
+    --service-role arn:aws:iam::<AWS_ACCOUNT_ID>:role/ec2_default \
     --region us-west-2
 
-    arn:aws:iam::994441203305:instance-profile/ec2_default
+    arn:aws:iam::<AWS_ACCOUNT_ID>:instance-profile/ec2_default
 
 aws batch describe-job-definitions --job-definition-name inverse-design --region us-west-2 --query 'jobDefinitions[0].containerProperties.image'
-994441203305.dkr.ecr.us-west-2.amazonaws.com/inverse-design-simulation:latest
+<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/inverse-design-simulation:latest
 aws batch describe-jobs --jobs fe5a047e-bfe3-4ee8-b544-4eef1985d263 --region us-west-2 --query 'jobs[0].{Status:status,StatusReason:statusReason,Attempts:attempts[0].statusReason}'
 aws batch describe-compute-environments --compute-environments inverse-design --region us-west-2 --query 'computeEnvironments[0].computeResources.instanceRole'
 
@@ -144,10 +144,10 @@ aws batch register-job-definition \
     --job-definition-name inverse-design-simulation-pchiu \
     --type container \
     --container-properties '{
-        "image": "994441203305.dkr.ecr.us-west-2.amazonaws.com/pchiu/inverse-design-simulation:latest",
+        "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/pchiu/inverse-design-simulation:latest",
         "vcpus": 8,
         "memory": 4096,
-        "jobRoleArn": "arn:aws:iam::994441203305:role/BatchJobRole",
+        "jobRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/BatchJobRole",
         "command": ["sh", "-c", "cd /app/src/inverse_design && python3 rf/arcade_example.py --config configs/test.json --target configs/target.json"]
     }'
 
@@ -166,10 +166,10 @@ aws batch register-job-definition \
     --job-definition-name inverse-design-simulation-mean-only-pchiu \
     --type container \
     --container-properties '{
-        "image": "994441203305.dkr.ecr.us-west-2.amazonaws.com/pchiu/inverse-design-simulation-mean-only:latest",
+        "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/pchiu/inverse-design-simulation-mean-only:latest",
         "vcpus": 128,
         "memory": 8192,
-        "jobRoleArn": "arn:aws:iam::994441203305:role/BatchJobRole",
+        "jobRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/BatchJobRole",
         "command": [
             "sh", "-c", 
             "cd /app/src/inverse_design && python3 rf/arcade_example.py --config ../../configs/config_combined_n1024_iter5.json --target ../../configs/target.json"

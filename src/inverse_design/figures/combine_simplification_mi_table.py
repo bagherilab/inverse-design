@@ -154,7 +154,7 @@ ALL_LEVELS = [
     ("t15", "dendrogram", "1.5"),
 ]
 LEVEL_LABELS = {
-    "orig": "Full",
+    "orig": "Original",
     "r09": "0.9",
     "r08": "0.8",
     "r07": "0.7",
@@ -443,7 +443,8 @@ def _mi_direction_arrow(direction: int) -> str:
 
 def _format_mi_direction(value: float, direction: int) -> str:
     arrow = _mi_direction_arrow(direction)
-    return f"{value:.2f}{arrow}" if arrow else f"{value:.2f}"
+    label = "<0.01" if 0 < value < 0.005 else f"{value:.2f}"
+    return label + arrow
 
 
 def _param_label(param: str) -> str:
@@ -847,7 +848,7 @@ def export_mi_summary_to_json(out_path: Path, args: argparse.Namespace) -> None:
         "description": (
             "Per-parameter mutual information vs doubling time, symmetry, and colony growth for "
             "each PCA-defined posterior peak (1-4) and each simplification level. "
-            "Full: N1024 iter_4 particles assigned to peak via 2D PCA + nearest centroid in "
+            "Original: N1024 iter_4 particles assigned to peak via 2D PCA + nearest centroid in "
             "summary_json. Other columns: N512 ABC_SMC_RF_N512_combined_grid_{linear|dendrogram}_"
             "{threshold}_p{peak}_mean_only/iter_4. "
             "MI from sklearn.feature_selection.mutual_info_regression (random_state=42), "

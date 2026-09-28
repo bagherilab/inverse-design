@@ -302,11 +302,11 @@ def _draw_panel_a(fig, subplot_spec, args, target_metrics):
         if col_idx == 0:
             for row_idx, ax in enumerate(axes):
                 ax.text(
-                    0.03,
+                    0.97,
                     0.82,
-                    labels[row_idx].replace("iter_", "g"),
+                    labels[row_idx].replace("iter_", "gen-"),
                     transform=ax.transAxes,
-                    ha="left",
+                    ha="right",
                     va="center",
                     fontsize=args.font_size,
                     fontweight="bold",

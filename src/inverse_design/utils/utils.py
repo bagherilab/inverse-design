@@ -1,4 +1,5 @@
 # utils.py
+import logging
 import os
 from typing import List, Dict
 import pandas as pd
@@ -265,3 +266,84 @@ def extract_zip_cleanly(zip_path, extract_to=None):
     cleaned_path = clean_zip_structure(extracted_path)
 
     return cleaned_path
+
+
+def archive_directory(source_dir, archive_path=None, *, level=3, threads=0, exclude=None):
+    """Archive a directory quickly, preferring multithreaded zstd over Python's zipfile.
+
+    `zip_directory` uses `zipfile` with ZIP_DEFLATED, which is single-threaded and
+    pays Python-level overhead per member. On an ARCADE generation (~300k small
+    JSON files) that dominates the whole upload step -- the transfer itself is one
+    object and takes minutes.
+
+    `tar` piped through `zstd -T0` runs the compressor across all cores and keeps
+    the per-file work in C, which is typically an order of magnitude faster at a
+    comparable ratio.
+
+    Falls back to `zip_directory` when `tar`/`zstd` are unavailable, so callers
+    always get an archive.
+
+    Args:
+        source_dir: Directory to archive.
+        archive_path: Output path. Defaults to `<source_dir>.tar.zst`
+            (or `<source_dir>.zip` on fallback).
+        level: zstd compression level. 3 is the speed/ratio sweet spot here.
+        threads: zstd worker threads; 0 means one per core.
+        exclude: glob patterns to leave out, matched against the file name.
+            Used to keep raw ARCADE `*.CELLS.json` / `*.LOCATIONS.json` out
+            of an archive: they are regenerable from the input XML and the
+            pinned ARCADE version, and they dominate the size by ~4 orders
+            of magnitude.
+
+    Returns:
+        Path to the archive that was created.
+    """
+    import fnmatch
+    import subprocess
+
+    source_dir = str(source_dir).rstrip("/")
+    parent = os.path.dirname(source_dir) or "."
+    name = os.path.basename(source_dir)
+    patterns = list(exclude or [])
+    excl_args = [arg for pattern in patterns for arg in ("--exclude", pattern)]
+
+    if shutil.which("tar"):
+        # zstd is the fastest option but is absent from the analysis container,
+        # so gzip is the realistic path. Either way the per-file work stays in
+        # C; Python's zipfile pays interpreter overhead per member, which is
+        # what makes it unusable on an ARCADE generation of ~300k small files.
+        if shutil.which("zstd"):
+            out = archive_path or f"{source_dir}.tar.zst"
+            compressor = ["-I", f"zstd -{level} -T{threads}"]
+        else:
+            out = archive_path or f"{source_dir}.tar.gz"
+            compressor = ["-z"]
+        cmd = ["tar", *excl_args, *compressor, "-cf", out, "-C", parent, name]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)
+            return out
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode(errors="replace") if exc.stderr else ""
+            logging.warning("tar archiving failed (%s); falling back to zip", stderr.strip())
+
+    if not patterns:
+        return zip_directory(
+            source_dir, archive_path or f"{source_dir}.zip", include_root_folder=True
+        )
+
+    # The zip fallback has to honour `exclude` too. Silently ignoring it would
+    # archive the raw ARCADE output the caller asked to leave out -- tens of
+    # gigabytes per generation.
+    out = archive_path or f"{source_dir}.zip"
+    root_folder_name = os.path.basename(source_dir)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, _dirs, files in os.walk(source_dir):
+            for file in files:
+                if any(fnmatch.fnmatch(file, pattern) for pattern in patterns):
+                    continue
+                file_path = os.path.join(root, file)
+                arcname = os.path.join(
+                    root_folder_name, os.path.relpath(file_path, source_dir)
+                )
+                zipf.write(file_path, arcname)
+    return out

@@ -9,6 +9,7 @@ import concurrent.futures
 import tempfile
 import os
 import re
+import sys
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -17,6 +18,16 @@ from inverse_design.rf.drf import DRF
 from inverse_design.examples.run_simulations import run_simulations
 from inverse_design.common.enum import Target
 from inverse_design.rf.abc_smc_rf_base import ABCSMCRFBase
+from inverse_design.rf.shard_support import (
+    generation_is_analysed,
+    prune_incomplete_outputs,
+)
+from inverse_design.rf.smc_provenance import (
+    count_input_files,
+    particle_ids_from_folders,
+    write_lineage,
+    write_weights,
+)
 from inverse_design.io import ArcadeRunLayout
 from inverse_design.utils.s3_utils import (
     ensure_dir_exists,
@@ -40,6 +51,7 @@ class ABCSMCRF(ABCSMCRFBase):
         self,
         n_iterations: int = 5,
         sobol_power: int = 2,
+        n_particles: Optional[int] = None,
         rf_type: Literal["RF", "DRF"] = "DRF",
         n_trees: int = 500,
         min_samples_leaf: int = 5,
@@ -89,6 +101,8 @@ class ABCSMCRF(ABCSMCRFBase):
             n_iterations, rf_type, n_trees, min_samples_leaf, n_try, random_state, criterion
         )
         self.sobol_power = sobol_power
+        # Particle count; falls back to 2**sobol_power when unset.
+        self.n_particles = n_particles
         self.param_ranges = param_ranges
         self.subsample_ratio = subsample_ratio
         self.perturbation_kernel = (
@@ -161,8 +175,13 @@ class ABCSMCRF(ABCSMCRFBase):
         """Run ARCADE simulations in parallel."""
         from inverse_design.examples.run_simulations import run_simulations
 
-        all_output_names = [f"input_{i}" for i in range(1, 2**self.sobol_power + 1)]
+        all_output_names = [f"input_{i}" for i in range(1, self.n_samples + 1)]
         if path_exists(output_dir):
+            if not is_s3_path(output_dir):
+                # A job killed mid-simulation leaves a directory that exists but
+                # holds a truncated trajectory; without this it would be counted
+                # as finished. See shard_support for why this matters.
+                prune_incomplete_outputs(output_dir, input_dir)
             current_output_names = list_files(output_dir + "/inputs", "input_*")
             missing_output_indices = [
                 int(f.split("_")[-1].split(".")[0])
@@ -171,16 +190,54 @@ class ABCSMCRF(ABCSMCRFBase):
             ]
             if len(missing_output_indices) == 0:
                 print(
-                    f"ARCADE simulations for {output_dir} already exist, and have {len(current_output_names)} outputs (target = {2 ** self.sobol_power}), skipping generation"
+                    f"ARCADE simulations for {output_dir} already exist, and have {len(current_output_names)} outputs (target = {self.n_samples}), skipping generation"
                 )
                 return
             else:
                 print(
-                    f"ARCADE simulations for {output_dir} exist but have {len(current_output_names)} outputs, expected {2 ** self.sobol_power}"
+                    f"ARCADE simulations for {output_dir} exist but have {len(current_output_names)} outputs, expected {self.n_samples}"
                 )
         else:
             ensure_dir_exists(output_dir)
-            missing_output_indices = list(range(1, 2**self.sobol_power + 1))
+            missing_output_indices = list(range(1, self.n_samples + 1))
+
+        if os.environ.get("DED_PREPARE_ONLY"):
+            # Sharded mode: this process exists only to replay finished
+            # generations and lay down the next generation's inputs. The
+            # simulations themselves belong to the shard jobs, so stop here
+            # rather than running 5000 of them on one node.
+            print(
+                f"DED_PREPARE_ONLY: {output_dir} needs "
+                f"{len(missing_output_indices)} simulations; leaving them to the "
+                f"shard jobs and exiting."
+            )
+            logging.info(
+                "DED_PREPARE_ONLY stop: iteration=%d pending=%d output_dir=%s",
+                self.current_iteration,
+                len(missing_output_indices),
+                output_dir,
+            )
+            marker = os.environ.get("DED_PREPARE_MARKER")
+            if marker:
+                # The submitting script needs to know which generation to hand
+                # to the shards; parsing it back out of the log would be
+                # fragile.
+                import json
+
+                with open(marker, "w") as handle:
+                    json.dump(
+                        {
+                            "iteration": self.current_iteration,
+                            "input_dir": input_dir,
+                            "output_dir": output_dir,
+                            "pending": len(missing_output_indices),
+                            "n_particles": self.n_samples,
+                        },
+                        handle,
+                    )
+            sys.stdout.flush()
+            raise SystemExit(0)
+
         # Run simulations
 
         run_simulations(
@@ -190,6 +247,13 @@ class ABCSMCRF(ABCSMCRFBase):
             max_workers=self.n_cpu,
             running_index=missing_output_indices,
         )
+
+    @property
+    def n_samples(self) -> int:
+        """Particles per generation: the override if given, else 2**sobol_power."""
+        if self.n_particles is not None:
+            return self.n_particles
+        return 2**self.sobol_power
 
     def fit(
         self,
@@ -241,6 +305,15 @@ class ABCSMCRF(ABCSMCRFBase):
             self._build_rf_model(t)
             # Compute weights for current samples
             self._compute_weights(t)
+            # ESS decides how much of the nominal particle count is real; a
+            # density estimated from a degenerate generation is a few particles
+            # plus kernel smoothing. Written every replay since it follows
+            # deterministically from the forest that just produced it.
+            write_weights(
+                str(Path(output_dir) / f"iter_{t}"),
+                particle_ids=self.particle_ids[t] if t < len(self.particle_ids) else [],
+                weights=self.weights[t],
+            )
 
             logging.info(
                 f"Iteration {t+1} completed with {len(self.parameter_samples[t])} particles"
@@ -250,14 +323,19 @@ class ABCSMCRF(ABCSMCRFBase):
 
     def _remove_invalid_rows(
         self, statistics: np.ndarray, valid_parameters: pd.DataFrame
-    ) -> Tuple[np.ndarray, pd.DataFrame]:
+    ) -> Tuple[np.ndarray, pd.DataFrame, np.ndarray]:
         """
         Remove rows containing NaN or infinite values.
+
+        Also returns the positions that survived, so callers can carry the
+        particles' input indices through the same filtering instead of
+        re-deriving which simulations were dropped.
         """
         indices = np.where(np.isnan(statistics).any(axis=1) | np.isinf(statistics).any(axis=1))[0]
+        kept = np.setdiff1d(np.arange(len(statistics)), indices)
         statistics = np.delete(statistics, indices, axis=0)
         valid_parameters = valid_parameters.drop(valid_parameters.index[indices])
-        return statistics, valid_parameters
+        return statistics, valid_parameters, kept
 
     def normalize_statistics(self, statistics: np.ndarray) -> Tuple[np.ndarray, StandardScaler]:
         """
@@ -297,7 +375,7 @@ class ABCSMCRF(ABCSMCRFBase):
             [f for f in out_iter.glob("inputs/input_*")],
             key=lambda x: int(re.search(r"input_(\d+)", x.name).group(1)),
         )
-        sim_folders = sim_folders[: 2**self.sobol_power]
+        sim_folders = sim_folders[: self.n_samples]
         final_metrics = out_layout.final_metrics_csv(dir_postfix)
         all_param = out_layout.all_param_df_csv(dir_postfix)
         if not path_exists(str(final_metrics)):
@@ -306,15 +384,16 @@ class ABCSMCRF(ABCSMCRFBase):
             metrics_calculator.extract_and_save_parameters(
                 sim_folders, self.param_list, self.source_param_list
             )
-            statistics = read_csv(str(final_metrics))
-            valid_parameters = read_csv(str(all_param))
-            statistics.drop(columns=["input_folder", "states"], inplace=True)
-            valid_parameters.drop(columns=["input_folder"], inplace=True)
-        else:
-            statistics = read_csv(str(final_metrics))
-            valid_parameters = read_csv(str(all_param))
-            statistics.drop(columns=["input_folder", "states"], inplace=True)
-            valid_parameters.drop(columns=["input_folder"], inplace=True)
+        statistics = read_csv(str(final_metrics))
+        valid_parameters = read_csv(str(all_param))
+        # input_folder is the only link between a row and the simulation it came
+        # from, and it is dropped just below. Keep it so lineage and weights can
+        # be written against real input indices rather than row positions.
+        self._pending_particle_ids = particle_ids_from_folders(
+            valid_parameters["input_folder"]
+        )
+        statistics.drop(columns=["input_folder", "states"], inplace=True)
+        valid_parameters.drop(columns=["input_folder"], inplace=True)
         if len(valid_parameters.columns) > len(self.param_ranges.keys()):
             valid_parameters = valid_parameters[self.param_ranges.keys()]
 
@@ -335,12 +414,20 @@ class ABCSMCRF(ABCSMCRFBase):
         dir_postfix = f"iter_{self.current_iteration}"
         iter_in = str(Path(input_dir) / dir_postfix)
         iter_out = str(Path(output_dir) / dir_postfix)
-        generate_perturbed_parameters(
-            sobol_power=self.sobol_power,
-            param_ranges=self.param_ranges,
-            config_params=self.config_params,
-            output_dir=iter_in,
-        )
+        if generation_is_analysed(iter_out):
+            # Replaying a settled generation. Generating inputs here would draw
+            # a fresh Sobol set and write it over - or in place of - the one the
+            # recorded results came from, which is only harmless for as long as
+            # final_metrics.csv survives to keep anyone from re-deriving
+            # parameters out of those XMLs.
+            logging.info("Skipping input generation for %s: already analysed", iter_in)
+        else:
+            generate_perturbed_parameters(
+                sobol_power=self.sobol_power,
+                param_ranges=self.param_ranges,
+                config_params=self.config_params,
+                output_dir=iter_in,
+            )
         # Run simulations in parallel
         self._run_parallel_simulations(iter_in, iter_out, jar_path)
 
@@ -351,9 +438,10 @@ class ABCSMCRF(ABCSMCRFBase):
         target_stats_array = np.array(
             [statistics[target_name] for target_name in self.target_names]
         ).T
-        target_stats_array, valid_parameters = self._remove_invalid_rows(
+        target_stats_array, valid_parameters, kept = self._remove_invalid_rows(
             target_stats_array, valid_parameters
         )
+        self.particle_ids.append([self._pending_particle_ids[i] for i in kept])
         target_stats, self.scaler = self.normalize_statistics(target_stats_array)
         self.target_values = self.scaler.transform(
             np.array(self.target_values).reshape(-1, len(self.target_values))
@@ -375,8 +463,12 @@ class ABCSMCRF(ABCSMCRFBase):
         prev_weights = self.weights[-1]
 
         # Generate candidate parameters
-        n_candidates = 2**self.sobol_power
+        n_candidates = self.n_samples
         parameters = np.zeros((n_candidates, prev_parameters.shape[1]), dtype=object)
+        # Parent of each accepted candidate, as a position in prev_parameters.
+        # Rejected draws leave no trace, so this is appended to only on accept
+        # and stays aligned with the rows of `parameters`.
+        parent_positions: List[int] = []
 
         i = 0
         while i < n_candidates:
@@ -429,6 +521,7 @@ class ABCSMCRF(ABCSMCRFBase):
             )
             if prior_density > 0:
                 parameters[i] = theta_candidate
+                parent_positions.append(int(idx))
                 i += 1
 
         dir_postfix = f"iter_{self.current_iteration}"
@@ -465,12 +558,35 @@ class ABCSMCRF(ABCSMCRFBase):
                 param[capillary_index] = capillary_density
         iter_in = str(Path(input_dir) / dir_postfix)
         iter_out = str(Path(output_dir) / dir_postfix)
-        generate_input_files(
-            param_names=input_param_names,
-            param_values=parameters,
-            abc_param_ranges=self.param_ranges,
-            output_dir=iter_in,
-            config_params=self.config_params,
+        # Whether the inputs already exist decides whether the draws above
+        # become simulations or get thrown away, and so whether the lineage
+        # just computed describes this generation or a replay of it.
+        already_analysed = generation_is_analysed(iter_out)
+        inputs_pre_existed = already_analysed or count_input_files(iter_in) >= n_candidates
+        if already_analysed:
+            # See _first_iteration. The draws above belong to a replay and are
+            # discarded; writing them would leave XMLs that disagree with the
+            # parameters this generation's results were actually produced from.
+            logging.info("Skipping input generation for %s: already analysed", iter_in)
+        else:
+            generate_input_files(
+                param_names=input_param_names,
+                param_values=parameters,
+                abc_param_ranges=self.param_ranges,
+                output_dir=iter_in,
+                config_params=self.config_params,
+            )
+        # Parent positions index the previous generation's surviving particles;
+        # translate them to that generation's input indices so the lineage joins
+        # to simulations rather than to array offsets.
+        prev_ids = self.particle_ids[-1] if self.particle_ids else []
+        write_lineage(
+            iter_in,
+            child_ids=list(range(1, n_candidates + 1)),
+            parent_ids=[
+                prev_ids[p] if p < len(prev_ids) else -1 for p in parent_positions
+            ],
+            inputs_pre_existed=inputs_pre_existed,
         )
         self._run_parallel_simulations(iter_in, iter_out, jar_path)
 
@@ -479,7 +595,10 @@ class ABCSMCRF(ABCSMCRFBase):
             input_dir, output_dir, dir_postfix, timestamps
         )
         target_stats = np.array([statistics[target_name] for target_name in self.target_names]).T
-        target_stats, valid_parameters = self._remove_invalid_rows(target_stats, valid_parameters)
+        target_stats, valid_parameters, kept = self._remove_invalid_rows(
+            target_stats, valid_parameters
+        )
+        self.particle_ids.append([self._pending_particle_ids[i] for i in kept])
         target_stats = self.scaler.transform(target_stats)
         if len(valid_parameters) < n_candidates:
             logging.warning(
@@ -500,7 +619,7 @@ class ABCSMCRF(ABCSMCRFBase):
         """
         if self.rf_type == "RF":
             # Combine weights from separate RF models
-            combined_weights = np.ones(self.n_particles)
+            combined_weights = np.ones(self.n_samples)
 
             for p, model in enumerate(self.rf_models[t]):
                 weights_p = model.predict_weights(self.observed_statistics)

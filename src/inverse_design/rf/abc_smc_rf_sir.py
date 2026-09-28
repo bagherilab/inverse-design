@@ -4,6 +4,7 @@ from typing import Callable, Optional, Tuple, Dict, List
 import logging
 from scipy.stats import multivariate_normal
 from inverse_design.rf.abc_smc_rf_base import ABCSMCRFBase
+from inverse_design.rf.smc_provenance import write_lineage, write_weights
 from inverse_design.models.sir.sir import SIR_ABM
 import multiprocessing as mp
 from functools import partial
@@ -361,6 +362,13 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
             Parameters that produced valid simulations
         valid_statistics : np.ndarray
             Corresponding statistics
+        valid_history : list
+            Corresponding simulation histories
+        valid_indices : list
+            Position in `parameters` of each surviving row. Failed simulations
+            are dropped silently otherwise, which leaves the caller unable to
+            say which candidate a surviving particle came from -- and so unable
+            to record its parent.
         """
         n_params = len(parameters)
 
@@ -388,16 +396,25 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
         valid_parameters = []
         valid_statistics = []
         valid_history = []
+        valid_indices = []
+        # `imap` yields in submission order, so results[i] belongs to
+        # parameters[i] and the index is the candidate's position.
         for i, (stats, history, success) in enumerate(results):
             if success and stats is not None:
                 valid_parameters.append(parameters[i])
                 valid_statistics.append(stats)
                 valid_history.append(history)
+                valid_indices.append(i)
 
         if len(valid_parameters) == 0:
             raise RuntimeError("No valid simulations produced")
 
-        return np.array(valid_parameters), np.array(valid_statistics), valid_history
+        return (
+            np.array(valid_parameters),
+            np.array(valid_statistics),
+            valid_history,
+            valid_indices,
+        )
 
     def fit(self, target_values: np.ndarray, simulator: SIR_ABM_Simulator) -> None:
         """
@@ -427,8 +444,8 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
                 parameters = self.prior_sampler(self.n_particles)
 
                 # Simulate statistics in parallel
-                valid_params, valid_stats, valid_history = self.simulate_particles_parallel(
-                    parameters, simulator_params
+                valid_params, valid_stats, valid_history, _ = (
+                    self.simulate_particles_parallel(parameters, simulator_params)
                 )
                 for i, history in enumerate(valid_history):
                     pd.DataFrame(history).to_csv(
@@ -436,6 +453,8 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
                     )
                 self.parameter_samples.append(valid_params)
                 self.statistics.append(valid_stats)
+                # The prior draw has no parents, so there is no lineage to write.
+                parent_ids = None
 
             else:
                 # Subsequent iterations
@@ -444,6 +463,10 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
 
                 # Generate candidate parameters
                 candidate_params = []
+                # Parent of each accepted candidate, as a position in
+                # prev_params. Appended only on acceptance so it stays aligned
+                # with candidate_params; rejected draws leave no trace.
+                candidate_parents = []
                 attempts = 0
                 max_attempts = self.n_particles * 10
 
@@ -460,6 +483,7 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
                     # Check prior
                     if self.prior_pdf(theta_candidate) > 0:
                         candidate_params.append(theta_candidate)
+                        candidate_parents.append(int(idx))
 
                 if len(candidate_params) < self.n_particles:
                     logging.warning(f"Only generated {len(candidate_params)} candidates")
@@ -467,9 +491,12 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
                 candidate_params = np.array(candidate_params)
 
                 # Simulate in parallel
-                valid_params, valid_stats, valid_history = self.simulate_particles_parallel(
-                    candidate_params, simulator_params
+                valid_params, valid_stats, valid_history, valid_indices = (
+                    self.simulate_particles_parallel(candidate_params, simulator_params)
                 )
+                # Carry the parents through the same filter the particles went
+                # through, and report them as 1-based ids to match the weights.
+                parent_ids = [candidate_parents[i] + 1 for i in valid_indices]
                 for i, history in enumerate(valid_history):
                     pd.DataFrame(history).to_csv(
                         f"{self.output_dir}/iter_{t}/history/history_{i}.csv", index=False
@@ -485,6 +512,20 @@ class ABCSMCRF_SIR(ABCSMCRFBase):
             # Build RF model and compute weights
             self._build_rf_model(t)
             self._compute_weights(t)
+
+            # R2.12 asks for the effective sample size on the SIR figure, and
+            # R2.16 for ancestor tracing. Both are in memory here and neither
+            # survived the run, so persist them beside the generation.
+            generation_dir = f"{self.output_dir}/iter_{t}"
+            particle_ids = list(range(1, len(self.parameter_samples[-1]) + 1))
+            write_weights(generation_dir, particle_ids, self.weights[-1])
+            if parent_ids is not None:
+                write_lineage(
+                    generation_dir,
+                    particle_ids,
+                    parent_ids,
+                    inputs_pre_existed=False,
+                )
 
             # Log progress
             weights = self.weights[-1]

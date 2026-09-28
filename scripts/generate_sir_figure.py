@@ -50,6 +50,8 @@ BASE_DIR = ROOT / "results/SIR/n3_t365_l30/n512"
 TARGET = ROOT / "results/SIR/n3_t365_l30/target_values.csv"
 TRUE_P = ROOT / "results/SIR/n3_t365_l30/true_params.csv"
 OUT = ROOT / "results/figures/SIR/SIR.png"
+# Display labels matching the manuscript notation for PI, PR, IIF, and ISF.
+PARAM_LABELS = [r"$P_I$", r"$P_R$", r"$I_{IF}$", r"$I_{SF}$"]
 
 
 def _panel_label(ax, label, x=-0.20):
@@ -101,14 +103,14 @@ def main():
         [[fig.add_subplot(gs_a[row, col]) for col in range(2)] for row in range(3)]
     )
     histories_by_generation = {
-        "g0": load_histories_from_dir(HIST_DIR, iteration=0),
-        "g4": load_histories_from_dir(HIST_DIR, iteration=4),
+        "gen-0": load_histories_from_dir(HIST_DIR, iteration=0),
+        "gen-4": load_histories_from_dir(HIST_DIR, iteration=4),
     }
     compartments = ["S", "I", "R"]
     reference_histories = [_run_reference_sir(seed, true_params) for seed in range(5)]
 
     for row, compartment in enumerate(compartments):
-        for col, generation in enumerate(["g0", "g4"]):
+        for col, generation in enumerate(["gen-0", "gen-4"]):
             ax = axes_a[row, col]
             for history in histories_by_generation[generation]:
                 ax.plot(
@@ -119,7 +121,7 @@ def main():
                     linewidth=0.4,
                 )
 
-            if generation == "g4":
+            if generation == "gen-4":
                 # Reference parameter curves — colored dashed
                 for ref_hist in reference_histories:
                     ax.plot(
@@ -185,7 +187,7 @@ def main():
         prior,
         posterior,
         true_params.to_numpy(),
-        param_names=["PI", "PR", "IIF", "ISF"],
+        param_names=PARAM_LABELS,
         axes=axes_b,
         tick_labelsize=FIG_TICK,
         axis_labelsize=FIG_AXIS_LABEL,
@@ -196,6 +198,27 @@ def main():
     for ax in axes_b.flat:
         pos = ax.get_position()
         ax.set_position([pos.x0 + PANEL_B_RIGHT_SHIFT, pos.y0, pos.width, pos.height])
+    # Panel B legend in the band above the panel, level with the panel A column titles.
+    b_left = axes_b[0, 0].get_position()
+    b_right = axes_b[0, 2].get_position()
+    fig.legend(
+        handles=[
+            Line2D([0], [0], marker="o", linestyle="none", markersize=4, markerfacecolor="#aaaaaa",
+                   markeredgecolor="black", markeredgewidth=0.2, label="gen-0"),
+            Line2D([0], [0], marker="o", linestyle="none", markersize=4, markerfacecolor="#bb883b",
+                   markeredgecolor="black", markeredgewidth=0.2, label="gen-4"),
+            Line2D([0], [0], marker="*", linestyle="none", markersize=8, markerfacecolor="#bb883b",
+                   markeredgecolor="black", markeredgewidth=0.9, label="Reference"),
+        ],
+        loc="lower center",
+        bbox_to_anchor=((b_left.x0 + b_right.x1) / 2, b_left.y1 + 0.002),
+        ncol=3,
+        frameon=False,
+        fontsize=FIG_TICK,
+        handletextpad=0.2,
+        columnspacing=1.2,
+        borderaxespad=0.0,
+    )
 
     # Panel C
     ax_c = fig.add_subplot(gs[1, 0:2])
@@ -232,6 +255,7 @@ def main():
         cbar_label_position="left",
         cbar_labelpad=10,
     )
+    ax_e.set_yticklabels(PARAM_LABELS, rotation=0)
     heatmap_pos = ax_e.get_position()
     ax_e.set_position([
         heatmap_pos.x0 + PANEL_D_RIGHT_SHIFT,

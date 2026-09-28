@@ -1,3 +1,39 @@
+import os
+from functools import lru_cache
+
+
+@lru_cache(maxsize=256)
+def _scan_folder(folder: str) -> tuple:
+    """Names in `folder`, sorted, cached per folder.
+
+    A simulation folder is read once per timestamp by each of the two loaders.
+    Globbing per call meant 28 directory scans of a 301-entry folder to read 300
+    files -- about 8,400 metadata operations per folder and 8.6 million per
+    generation of 1024, which is what made the analysis step latency-bound on
+    GPFS rather than bandwidth-bound. One scan per folder removes that.
+
+    Analysis runs after every simulation in the folder is complete and the
+    incomplete ones have been pruned, so the listing does not change underneath
+    the cache.
+    """
+    try:
+        return tuple(sorted(os.listdir(folder)))
+    except OSError:
+        return ()
+
+
+def list_simulation_files(folder, suffix: str):
+    """Paths in `folder` whose name ends with `suffix`, in seed order.
+
+    Names are `<exp_group>_<exp_name>_<seed>_<timestamp>.<type>.json` with a
+    zero-padded four-digit seed, so a lexical sort is a sort by seed.
+    """
+    from pathlib import Path
+
+    folder = Path(folder)
+    return [folder / name for name in _scan_folder(str(folder)) if name.endswith(suffix)]
+
+
 from typing import Dict
 import re
 

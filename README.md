@@ -477,7 +477,7 @@ Common env knobs:
 
 ## 6. License
 
-BSD 3-Clause. See `LICENSE` (add file if missing).
+MIT. See `LICENSE`.
 
 ARCADE simulator licensed separately — see [bagherilab/ARCADE](https://github.com/bagherilab/ARCADE).
 

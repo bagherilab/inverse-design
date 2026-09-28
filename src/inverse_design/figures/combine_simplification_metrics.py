@@ -111,7 +111,7 @@ SIMP_LEVELS_T = [
     ("t15", "dendrogram", "1.5"),
 ]
 LEVEL_LABELS = {
-    "orig": "Full",
+    "orig": "Original",
     "r09": "r=0.9",
     "r08": "r=0.8",
     "r07": "r=0.7",
@@ -241,7 +241,7 @@ def _percent_axis_for_metric(metric: str) -> tuple[float, float, list[float]]:
 def _format_tick(value: float) -> str:
     if np.isclose(value, round(value)):
         return f"{value:.0f}"
-    return f"{value:.2f}"
+    return f"{value:.1f}"
 
 
 def _signed_percent_error(value: float, target: float) -> float:

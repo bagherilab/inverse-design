@@ -72,7 +72,33 @@ SOURCE_SITE_PARAM_NAMES = (
 )
 
 
+_N_PARTICLES_OVERRIDE: int | None = None
+
+
+def set_particle_count(n_particles: int | None) -> None:
+    """Override the particle count, decoupling it from ``2**sobol_power``.
+
+    Call once at start-up from the run configuration. ``None`` restores the
+    default power-of-two behaviour, so existing configs are unaffected.
+
+    A non-power-of-two count forfeits the balance properties that make a Sobol
+    sequence low-discrepancy; SciPy warns about this. It only affects the
+    generation-0 prior draw, since later generations sample from the posterior.
+    """
+    global _N_PARTICLES_OVERRIDE
+    if n_particles is not None and n_particles < 1:
+        raise ValueError(f"n_particles must be >= 1, got {n_particles}")
+    _N_PARTICLES_OVERRIDE = n_particles
+
+
+def get_particle_count() -> int | None:
+    """Return the active particle-count override, or None if unset."""
+    return _N_PARTICLES_OVERRIDE
+
+
 def _num_sobol_samples(sobol_power: int) -> int:
+    if _N_PARTICLES_OVERRIDE is not None:
+        return _N_PARTICLES_OVERRIDE
     return 2**sobol_power
 
 
@@ -162,7 +188,8 @@ def _draw_sobol_samples(
         return np.empty((_num_sobol_samples(sobol_power), 0))
 
     sampler = qmc.Sobol(d=dimensions, scramble=scramble, seed=seed)
-    if use_base2:
+    # random_base2 can only emit 2**m points, so an override forces the general path.
+    if use_base2 and _N_PARTICLES_OVERRIDE is None:
         return sampler.random_base2(m=sobol_power)
     return sampler.random(n=_num_sobol_samples(sobol_power))
 

@@ -5,7 +5,7 @@ import json
 import re
 import logging
 from pathlib import Path
-from .utils.file_utils import FileParser
+from .utils.file_utils import FileParser, list_simulation_files
 
 
 class CellMetrics:
@@ -127,11 +127,7 @@ class CellMetrics:
         """
         results = []
         try:
-            file_pattern = f"*_{timestamp}.CELLS.json"
-            cell_files = sorted(
-                folder_path.glob(file_pattern),
-                key=lambda x: int(re.search(r"(\d{4})_", x.name).group(1)),
-            )
+            cell_files = list_simulation_files(folder_path, f"_{timestamp}.CELLS.json")
             for cell_file in cell_files:
                 file_info = self.file_parser.parse_simulation_file(cell_file.name, "CELLS")
                 if file_info:

@@ -60,6 +60,11 @@ class ABCSMCRFBase:
         self.weights = []
         self.statistics = []
         self.rf_models = []
+        # Input index of each surviving particle, per generation. Parallel to
+        # parameter_samples, which keeps only row positions once simulations
+        # that produced unusable statistics have been dropped.
+        self.particle_ids = []
+        self._pending_particle_ids = []
 
     def _build_rf_model(self, t: int) -> None:
         """

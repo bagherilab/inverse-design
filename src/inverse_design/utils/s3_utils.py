@@ -1,4 +1,6 @@
 import os
+import subprocess
+import shutil
 import json
 import pandas as pd
 from pathlib import Path
@@ -631,6 +633,21 @@ def upload_file_to_s3(file_path, s3_destination, aws_profile=None):
         # Get file size for progress (optional)
         file_size = os.path.getsize(file_path)
         print(f"Uploading {file_path} ({file_size:,} bytes) to s3://{bucket_name}/{s3_key}")
+
+        # s5cmd saturates the link with parallel multipart chunks; boto3's
+        # upload_file is single-stream and much slower on multi-GB archives.
+        if shutil.which("s5cmd"):
+            result = subprocess.run(
+                ["s5cmd", "cp", file_path, f"s3://{bucket_name}/{s3_key}"],
+                capture_output=True,
+            )
+            if result.returncode == 0:
+                print(f"\u2713 Successfully uploaded to s3://{bucket_name}/{s3_key} (s5cmd)")
+                return True
+            logging.warning(
+                "s5cmd upload failed (%s); falling back to boto3",
+                result.stderr.decode(errors="replace").strip(),
+            )
 
         # Upload file
         s3_client.upload_file(file_path, bucket_name, s3_key)

@@ -1,7 +1,9 @@
 from pathlib import Path
+import concurrent.futures
 import json
+import os
 import pandas as pd
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 import logging
 import re
 import numpy as np
@@ -56,9 +58,6 @@ class SimulationMetrics:
             for timestamp in timestamps
         }
 
-        for key, value in metrics_by_timestamp_seed.items():
-            print(key, value)
-
         n_cells_t1_seed_list = metrics_by_timestamp_seed[timestamps[0]]["n_cells"]
         n_cells_t2_seed_list = metrics_by_timestamp_seed[timestamps[-1]]["n_cells"]
         time_difference = int(timestamps[-1]) - int(timestamps[0])
@@ -99,8 +98,6 @@ class SimulationMetrics:
     ) -> Dict[str, Dict[str, float]]:
         """Aggregate metrics for a single timestamp."""
         aggregated_metrics = {}
-        for key, value in metrics_for_timestamp.items():
-            print(key, value)
         for metric_name, values in metrics_for_timestamp.items():
             aggregated_metrics[metric_name] = {}
 
@@ -119,6 +116,42 @@ class SimulationMetrics:
                 # aggregated_metrics[metric_name + "_75"] = np.percentile(values, 75)
 
         return aggregated_metrics
+
+    def _analyze_one_folder(
+        self, folder: Path, timestamps: List[str]
+    ) -> Tuple[Path, Optional[Dict[str, Any]], Optional[BaseException]]:
+        """Read one folder, returning the failure instead of raising it.
+
+        Errors have to travel back with their folder so the caller can log them
+        in folder order and skip that folder, exactly as the serial loop did.
+        """
+        try:
+            return folder, self.analyze_simulation(folder, timestamps), None
+        except Exception as error:  # noqa: BLE001 - mirrors the serial handler
+            return folder, None, error
+
+    def _analyze_folders_parallel(
+        self, sim_folders: List[Path], timestamps: List[str]
+    ) -> List[Tuple[Path, Optional[Dict[str, Any]], Optional[BaseException]]]:
+        """Read every folder, in parallel, preserving input order.
+
+        The work is dominated by waiting on GPFS, so threads help despite the
+        GIL, and they avoid having to make the metric objects picklable. Those
+        objects assign no attributes outside their constructors, so sharing them
+        across threads is safe. Set DED_ANALYSIS_WORKERS=1 to get the old serial
+        behaviour back.
+        """
+        configured = os.environ.get("DED_ANALYSIS_WORKERS")
+        workers = int(configured) if configured else min(16, (os.cpu_count() or 1))
+
+        if workers <= 1 or len(sim_folders) <= 1:
+            return [self._analyze_one_folder(f, timestamps) for f in sim_folders]
+
+        logging.info("Analysing %d folders with %d threads", len(sim_folders), workers)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            # map preserves the order of sim_folders regardless of completion
+            # order, which is what keeps the output row-for-row identical.
+            return list(pool.map(lambda f: self._analyze_one_folder(f, timestamps), sim_folders))
 
     def analyze_all_simulations(
         self, timestamps: List[str], sim_folders: List[Path]
@@ -140,12 +173,20 @@ class SimulationMetrics:
         final_results_seed = []
         temporal_results = {}
 
-        for folder in sim_folders:
+        # Each folder means ~280 JSON reads off GPFS. Serially, 5000 folders took
+        # longer than the sharded simulations that produced them, leaving the
+        # barrier as the slowest part of a generation. Only the reads run in
+        # parallel; everything below consumes them in the original folder order,
+        # so the assembled frames are identical to the serial version.
+        analysed = self._analyze_folders_parallel(sim_folders, timestamps)
+
+        for folder, metrics, read_error in analysed:
             try:
                 folder_number = int(re.search(r"input_(\d+)", folder.name).group(1))
                 if folder_number % 50 == 0:
                     print(f"Analyzing {folder.name} ({folder_number}/{len(sim_folders)})")
-                metrics = self.analyze_simulation(folder, timestamps)
+                if read_error is not None:
+                    raise read_error
                 final_metrics_flat = metrics["final_metrics"].copy()
                 final_metrics_flat["input_folder"] = folder.name
                 final_results.append(final_metrics_flat)
@@ -180,9 +221,20 @@ class SimulationMetrics:
         return df, temporal_results
 
     def _reorder_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Put the identifying columns last, in a deterministic order.
+
+        The incoming column order comes from set iteration upstream, and
+        CPython randomises string hashing per process, so two runs over the
+        same folders previously wrote the same values under a different column
+        order. That left final_metrics.csv not byte-reproducible between runs,
+        which matters for the archived pipeline. Sorting fixes the order
+        without touching any value; every consumer reads these files by column
+        name.
+        """
         cols = df.columns.tolist()
         cols.remove("input_folder")
         cols.remove("states")
+        cols = sorted(cols)
         cols.append("input_folder")
         cols.append("states")
         df = df[cols]

@@ -1,3 +1,5 @@
+import logging
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -60,19 +62,37 @@ class SeedAnalyzer:
         return metrics_dict
 
     def calculate_seed_metrics(self, folder_path, time_point) -> Dict[str, List]:
-        """Calculate metrics for a single seed and append to metrics dictionary.
+        """Per-seed metrics for one timestamp, in ascending seed order.
 
-        Args:
-            cells: Cell data for a single seed
-            locations: Location data for a single seed
-            metrics_dict: Dictionary to store metrics
+        The two loaders disagree on order. `load_cells_data` sorts by seed,
+        while `load_locations_data` returns files in directory-scan order, which
+        differs from one timestamp to the next. Zipping them positionally paired
+        each seed's cells with a different seed's locations, and because
+        `collect_colony_diameters_over_time` indexes trajectories by list
+        position, the colony-diameter trajectory handed to the growth regression
+        jumped between seeds at every timestamp. Per-timestamp aggregates were
+        unaffected -- a median over seeds does not care about order -- but
+        `colony_growth`, which is a fitted target, was wrong per particle.
+
+        Pairing on the seed itself fixes it and makes the result independent of
+        whatever order either loader happens to return.
         """
         cells_data = self.cell_metrics.load_cells_data(folder_path, time_point)
         locations_data = self.population_metrics.load_locations_data(folder_path, time_point)
+        locations_by_seed = {info["seed"]: data for info, data in locations_data}
         metrics_dict = {
             metric: [] for metric in CELLULAR_METRICS.keys() | POPULATION_METRICS.keys()
         }
-        for (_, cells), (_, locations) in zip(cells_data, locations_data):
+        for info, cells in cells_data:
+            locations = locations_by_seed.get(info["seed"])
+            if locations is None:
+                logging.error(
+                    "no LOCATIONS file for seed %s at %s in %s; seed skipped",
+                    info.get("seed"),
+                    time_point,
+                    folder_path,
+                )
+                continue
             metrics_dict = self._calculate_seed_metrics_helper(cells, locations, metrics_dict)
         return metrics_dict
 

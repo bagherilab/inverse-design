@@ -877,8 +877,8 @@ def analyze_parameter_errors(
         ax.set_xlim(0.5, n_metrics + 0.5)
         ax.legend(
             handles=[
-                Patch(facecolor="#aaaaaa", edgecolor="#666666", alpha=0.85, label="g0"),
-                Patch(facecolor=_BROWN, edgecolor="#333333", alpha=0.85, label="g4"),
+                Patch(facecolor="#aaaaaa", edgecolor="#666666", alpha=0.85, label="gen-0"),
+                Patch(facecolor=_BROWN, edgecolor="#333333", alpha=0.85, label="gen-4"),
             ],
             loc="upper right",
             bbox_to_anchor=(1.0, 1.0),

@@ -6,7 +6,7 @@ import logging
 import warnings
 import numpy as np
 from scipy import stats
-from .utils.file_utils import FileParser
+from .utils.file_utils import FileParser, list_simulation_files
 
 
 class PopulationMetrics:
@@ -176,8 +176,7 @@ class PopulationMetrics:
         """Load location data from a specific timestamp for all seeds"""
         results = []
         try:
-            file_pattern = f"*_{timestamp}.LOCATIONS.json"
-            location_files = folder_path.glob(file_pattern)
+            location_files = list_simulation_files(folder_path, f"_{timestamp}.LOCATIONS.json")
 
             for location_file in location_files:
                 file_info = self.file_parser.parse_simulation_file(location_file.name, "LOCATIONS")

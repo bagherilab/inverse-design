@@ -29,6 +29,7 @@ if not os.environ.get("DISPLAY"):
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 
@@ -250,25 +251,26 @@ def _plot_panel_a_combined(args, targets: dict[str, float]) -> Path:
             return_fig=True,
         )
         for row_idx in range(2):
+            _mark_truncated_bars(axes[row_idx, col_idx], args.hist_y_max)
             _sync_axis_text_sizes(axes[row_idx, col_idx], args.font_size)
             axes[row_idx, col_idx].tick_params(axis="y", labelleft=col_idx == 0)
 
     axes[0, 0].text(
-        0.03,
+        0.97,
         0.84,
-        "g0",
+        "gen-0",
         transform=axes[0, 0].transAxes,
-        ha="left",
+        ha="right",
         va="center",
         fontsize=args.font_size,
         fontweight="bold",
     )
     axes[1, 0].text(
-        0.03,
+        0.97,
         0.84,
-        "g4",
+        "gen-4",
         transform=axes[1, 0].transAxes,
-        ha="left",
+        ha="right",
         va="center",
         fontsize=args.font_size,
         fontweight="bold",
@@ -284,7 +286,7 @@ def _plot_panel_a_combined(args, targets: dict[str, float]) -> Path:
     )
 
     fig.set_size_inches(WIDTH_DOUBLE, 1.46, forward=True)
-    fig.subplots_adjust(left=0.07, right=0.995, top=0.96, bottom=0.30, wspace=0.08, hspace=0.12)
+    fig.subplots_adjust(left=0.07, right=0.995, top=0.96, bottom=0.30, wspace=0.08, hspace=0.25)
     save_path = args.output_dir / "A_histograms.png"
     savefig_both(fig, save_path)
     plt.close(fig)
@@ -597,6 +599,22 @@ def _draw_panel_label(
     )
 
 
+def _mark_truncated_bars(ax, y_max: float) -> None:
+    """Draw a break mark on every histogram bar that extends past the y-axis cap."""
+    for patch in list(ax.patches):
+        if not isinstance(patch, Rectangle) or patch.get_height() <= y_max:
+            continue
+        x0, width = patch.get_x(), patch.get_width()
+        low, high = 0.86 * y_max, 0.92 * y_max
+        ax.add_patch(
+            Rectangle((x0, low), width, high - low, facecolor="white", edgecolor="none",
+                      zorder=patch.get_zorder() + 1, clip_on=False)
+        )
+        for y in (low, high):
+            ax.plot([x0, x0 + width], [y - 0.02 * y_max, y + 0.02 * y_max], color="black",
+                    linewidth=0.6, zorder=patch.get_zorder() + 2, clip_on=False)
+
+
 def _draw_panel_a(fig, subplot_spec, args, targets: dict[str, float]) -> np.ndarray:
     metrics = _available_panel_a_metrics(targets, args.panel_a_metrics)
     prior_df = pd.read_csv(args.base_dir / f"iter_{args.prior_iteration}" / "final_metrics.csv")
@@ -609,7 +627,7 @@ def _draw_panel_a(fig, subplot_spec, args, targets: dict[str, float]) -> np.ndar
         2,
         len(metrics),
         subplot_spec=subplot_spec,
-        hspace=0.12,
+        hspace=0.25,
         wspace=0.12,
     )
     axes = np.empty((2, len(metrics)), dtype=object)
@@ -633,27 +651,29 @@ def _draw_panel_a(fig, subplot_spec, args, targets: dict[str, float]) -> np.ndar
             manage_layout=False,
             return_fig=True,
         )
+        _mark_truncated_bars(axes[0, col_idx], args.hist_y_max)
+        _mark_truncated_bars(axes[1, col_idx], args.hist_y_max)
         _sync_axis_text_sizes(axes[0, col_idx], args.font_size)
         _sync_axis_text_sizes(axes[1, col_idx], args.font_size)
         axes[0, col_idx].tick_params(axis="y", labelleft=col_idx == 0)
         axes[1, col_idx].tick_params(axis="y", labelleft=col_idx == 0)
 
     axes[0, 0].text(
-        0.03,
+        0.97,
         0.84,
-        "g0",
+        "gen-0",
         transform=axes[0, 0].transAxes,
-        ha="left",
+        ha="right",
         va="center",
         fontsize=args.font_size,
         fontweight="bold",
     )
     axes[1, 0].text(
-        0.03,
+        0.97,
         0.84,
-        "g4",
+        "gen-4",
         transform=axes[1, 0].transAxes,
-        ha="left",
+        ha="right",
         va="center",
         fontsize=args.font_size,
         fontweight="bold",

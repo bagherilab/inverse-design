@@ -4,6 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["pohaoc2 <pohaoc2@uw.edu>"]
 readme = "README.md"
+license = "MIT"
 packages = [{ include = "inverse_design", from = "src" }]
 include = [{ path = "src/inverse_design/sample_inputs/*.xml", format = ["sdist", "wheel"] }]
 

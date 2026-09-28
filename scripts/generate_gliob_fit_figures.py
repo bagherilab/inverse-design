@@ -2,7 +2,7 @@
 """Generate glioblastoma ABC g0 vs g4 metric histograms into ``results/figures/gliob/``.
 
 Uses :mod:`combine_fit_exp_figure` (same helpers as breast ``fit_exp``) with defaults
-matching ``ref_figures/glioblastoma.png`` column order and y-axis scale.
+matching the breast Fig 3A column order, with the SI y-axis scale.
 
 Requires a completed ARCADE SMC run directory containing ``targets.json`` and
 ``iter_0`` / ``iter_4`` / ``final_metrics.csv`` (see ``ParameterSampler`` glio path).
@@ -21,13 +21,13 @@ DEFAULT_GLIO_BASE = (
 )
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "figures" / "gliob"
 
-# Same column order as ref_figures/glioblastoma.png (SI figure).
+# Same column order as the breast Fig 3A panel.
 GLIO_PANEL_A_METRICS = [
     "doub_time",
-    "doub_time_std",
     "symmetry",
-    "symmetry_std",
     "colony_growth",
+    "doub_time_std",
+    "symmetry_std",
 ]
 
 
