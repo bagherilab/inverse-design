@@ -33,6 +33,14 @@ paths:
 `hpc/` holds the Slurm drivers used on the University of Washington Hyak
 cluster. Account names and paths in them are site-specific examples.
 
+- `hpc/pm50_reduced/`: the reduced-configuration campaign behind Fig 4 and
+  S10 Fig (`make_pm50_configs.py` writes the 28 chain configs in `configs/`).
+  Generations 0-3 use `src/inverse_design/sample_inputs/sample_combined_v3_5seed.xml`
+  (five seeds) and generation 4 the ten-seed template;
+  `set_template_for_generation.py` makes the switch.
+- `hpc/r46_corrected/`: the 12-arm `bench_pm50_corrected_ml_*` selector
+  campaign (campaign, selection manifest, and per-arm configs).
+
 ## Manuscript item to script
 
 | Item | Script (in `analysis_scripts/` unless noted) |
@@ -42,7 +50,7 @@ cluster. Account names and paths in them are site-specific examples.
 | Fig 4, S10 Fig, S1 Data, reduced-configuration MAEs and rank correlations | `regenerate_simplification_matched.py` |
 | S1 Fig (extended SIR endpoint) | `sir_r212_extinction.py`, then `reviewer_sir_common_kde.py --render-extinction-only` |
 | S2 Fig, S3 Fig, S1 Table | `sir_r212_replicate.py`, `reviewer_sir_common_kde.py`, `sir_mode_target_errors.py` |
-| S4 Fig | `regenerate_s3_empirical_stopping.py`; ARCADE values: `arcade_generation_errors.py` |
+| S4 Fig | `regenerate_s3_empirical_stopping.py`; ARCADE values: `arcade_generation_errors.py`; per-generation MAE/ESS table on the cluster: `sweep_report.py` |
 | S5 Fig | `scripts/combine_feasible_metrics_ranges.py` (repository root) |
 | S6 Fig | `reviewer_seed_precision.py` |
 | S7 Fig | `scripts/generate_gliob_fit_figures.py`, `scripts/generate_legacy_gliob_histograms.py` (repository root) |
