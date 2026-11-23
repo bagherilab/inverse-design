@@ -5,7 +5,7 @@
 ² Department of Biology, University of Washington, Seattle, WA 98195, USA
 
 [![CI](https://github.com/bagherilab/inverse-design/actions/workflows/ci.yml/badge.svg)](https://github.com/bagherilab/inverse-design/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 [![Poetry](https://img.shields.io/badge/package-Poetry-60A5FA.svg)](https://python-poetry.org/)
 [![Code style: Black](https://img.shields.io/badge/code%20style-Black-000000.svg)](https://github.com/psf/black)
 [![Lint: Ruff](https://img.shields.io/badge/lint-Ruff-46A2F1.svg)](https://docs.astral.sh/ruff/)
@@ -181,8 +181,8 @@ editing JSON or Python. It only writes a run directory; you run that directory
 locally or on a cluster.
 
 ```bash
-pip install 'PySide6>=6.6'          # once; the GUI is optional
-python -m inverse_design.gui        # or: python -m inverse_design.gui my_template.xml
+poetry install                             # includes PySide6 (Python < 3.15)
+poetry run python -m inverse_design.gui    # or: ... -m inverse_design.gui my_template.xml
 ```
 
 1. **Template & parameters.** Pick your XML template and the ARCADE JAR. The GUI
