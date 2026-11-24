@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +27,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.5
+          version: 2.1.1
           virtualenvs-create: true
           virtualenvs-in-project: true
 
@@ -48,7 +48,7 @@ jobs:
         run: poetry run pylint src/inverse_design --fail-under=8.0
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -60,7 +60,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.5
+          version: 2.1.1
           virtualenvs-create: true
           virtualenvs-in-project: true
 
@@ -73,7 +73,12 @@ jobs:
       - name: Install dependencies (including dev)
         run: poetry install --no-interaction --no-ansi --with dev
 
+      - name: System libraries for the PySide6 GUI tests
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+
       - name: Pytest
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: poetry run pytest tests/ -q
 
       - name: Upload coverage to Codecov
@@ -83,7 +88,7 @@ jobs:
           fail_ci_if_error: false
 
   security-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -96,7 +101,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.5
+          version: 2.1.1
           virtualenvs-create: true
           virtualenvs-in-project: true
 
@@ -109,6 +114,10 @@ jobs:
       - name: Install dependencies (including dev)
         run: poetry install --no-interaction --no-ansi --with dev
 
+      - name: Upgrade the venv's pip
+        # pip is not in poetry.lock: the venv gets whatever pip virtualenv seeds,
+        # which pip-audit then reports.
+        run: poetry run python -m pip install --upgrade pip
+
       - name: pip-audit
-        # CVE-2026-3219 is currently reported for pip with no fixed version.
-        run: poetry run pip-audit --ignore-vuln CVE-2026-3219
+        run: poetry run pip-audit

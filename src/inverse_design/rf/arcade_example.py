@@ -127,6 +127,10 @@ def prior_pdf(params, param_columns, param_ranges, config_params=None):
     """
     Evaluate the uniform prior density at the given parameters.
 
+    Every free parameter is range-checked (Step 8 of Dinh et al. Algorithm 6:
+    a proposal with zero prior density is rejected). Parameters whose range is
+    degenerate (min == max) are fixed and not checked.
+
     Parameters:
     -----------
     params : array-like
@@ -136,34 +140,40 @@ def prior_pdf(params, param_columns, param_ranges, config_params=None):
     Returns:
     --------
     density : float
-        Prior probability density at the given parameters (constant if valid, 0 if invalid)
+        Product of the uniform densities over the free parameters if every
+        parameter is inside its range, 0 otherwise.
+
+    Note:
+    -----
+    Corrected 2026-08-04 (combined/source branch, as run on Hyak from
+    ``corrected/arcade_example.py``) and 2026-11-23 (cellular branch). Before
+    that, the cellular branch returned after checking only the first parameter,
+    and the combined branch checked only the spacing and source-concentration
+    parameters, so most cellular parameters were never range-checked. The
+    published N1024 run used the uncorrected function.
     """
     if len(params) != len(param_ranges):
         raise ValueError(f"Expected {len(param_ranges)} parameters, got {len(params)}")
-    if config_params["perturbed_config"] == "cellular":
-        # Check if the number of parameters matches
-        for i, (param_name, (min_val, max_val)) in enumerate(param_ranges.items()):
-            param_index = param_columns.index(param_name)
+    for param_name, (min_val, max_val) in param_ranges.items():
+        param_index = param_columns.index(param_name)
+        if param_name in ["X_SPACING", "Y_SPACING"] and isinstance(params[param_index], str):
+            # Source spacings are stored as "start:end" strings.
+            if config_params["point_based"] and param_name == "Y_SPACING":
+                spacing = int(params[param_index].split(":")[0])
+            else:
+                spacing = int(params[param_index].split(":")[-1])
+            if spacing < min_val or spacing > max_val:
+                return 0.0  # Parameter out of range, zero density
+        elif max_val > min_val:
             if params[param_index] < min_val or params[param_index] > max_val:
                 return 0.0  # Parameter out of range, zero density
-            else:
-                return 1.0 / (max_val - min_val)
-    else:
-        for i, (param_name, (min_val, max_val)) in enumerate(param_ranges.items()):
-            param_index = param_columns.index(param_name)
-            if param_name in ["X_SPACING", "Y_SPACING"]:
-                if config_params["point_based"] and param_name == "Y_SPACING":
-                    original_y_spacing = int(params[param_index].split(":")[0])
-                    if original_y_spacing < min_val or original_y_spacing > max_val:
-                        return 0.0  # Parameter out of range, zero density
-                else:
-                    spacing = int(params[param_index].split(":")[-1])
-                    if spacing < min_val or spacing > max_val:
-                        return 0.0  # Parameter out of range, zero density
-            elif param_name in ["GLUCOSE_CONCENTRATION", "OXYGEN_CONCENTRATION"]:
-                if params[param_index] < min_val or params[param_index] > max_val:
-                    return 0.0  # Parameter out of range, zero density
-    return 1.0 / (max_val - min_val)
+    # Uniform prior: the density is the product over the free parameters.
+    density = 1.0
+    for param_name, (min_val, max_val) in param_ranges.items():
+        if param_name in ["X_SPACING", "Y_SPACING"] or max_val <= min_val:
+            continue
+        density /= max_val - min_val
+    return density
 
 
 _KERNEL_SCALE_LOGGED = set()

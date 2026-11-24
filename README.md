@@ -5,7 +5,7 @@
 ² Department of Biology, University of Washington, Seattle, WA 98195, USA
 
 [![CI](https://github.com/bagherilab/inverse-design/actions/workflows/ci.yml/badge.svg)](https://github.com/bagherilab/inverse-design/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 [![Poetry](https://img.shields.io/badge/package-Poetry-60A5FA.svg)](https://python-poetry.org/)
 [![Code style: Black](https://img.shields.io/badge/code%20style-Black-000000.svg)](https://github.com/psf/black)
 [![Lint: Ruff](https://img.shields.io/badge/lint-Ruff-46A2F1.svg)](https://docs.astral.sh/ruff/)
@@ -173,6 +173,48 @@ Expected output: posterior shifts to parameter regimes producing 40% peak infect
 ---
 
 ## 3. CLI: ARCADE input generation + simulation
+
+### 3.0 GUI quick start (recommended for new ARCADE users)
+
+A desktop GUI sets up a calibration from your own ARCADE XML template without
+editing JSON or Python. It only writes a run directory; you run that directory
+locally or on a cluster.
+
+```bash
+poetry install                             # includes PySide6 (Python < 3.15)
+poetry run python -m inverse_design.gui    # or: ... -m inverse_design.gui my_template.xml
+```
+
+1. **Template & parameters.** Pick your XML template and the ARCADE JAR. The GUI
+   lists every numeric parameter in the template (plain numbers and the MU/SIGMA
+   or MIN/MAX fields of `NORMAL(...)`/`UNIFORM(...)`). Tick the ones to perturb
+   and edit their uniform prior range (default 0.5x-1.5x of the template value).
+   Seeds per particle, duration, snapshot interval, radius and margin are
+   prefilled from `<series>` and can be changed here. Every particle stays inside
+   the ranges, and perturbed `UNIFORM` fields always keep `MIN <= MAX`. ARCADE
+   rounds an odd radius or margin up by one, so the GUI warns about odd values.
+2. **Target metrics.** Tick built-in metrics (doubling time, symmetry, colony
+   growth, ...) and enter one target value each, for the median across seeds
+   and/or the SD across seeds (`_std`). For your own metrics, point to a `.py`
+   file (or click *New from template…*): every public one-argument function is a
+   metric that receives one seed (`seed.timestamps`, `seed.cells(t)`,
+   `seed.locations(t)`, `seed.days()`) and returns a float. *Test on sample
+   output…* runs the functions on an existing ARCADE output folder.
+3. **Run settings & export.** Set particles, generations and forest settings,
+   choose a run directory and export. The run directory holds `run_spec.json`,
+   `template.xml`, `custom_metrics.py`, `run.sh` and a README.
+
+Run the exported directory (Java 8+ and this package installed):
+
+```bash
+bash /path/to/run_dir/run.sh --dry-run   # check the setup and print the plan
+bash /path/to/run_dir/run.sh             # run; re-running resumes where it stopped
+bash /path/to/run_dir/run.sh --prepare-only   # only write the next generation's inputs
+```
+
+The result, `arcade_outputs/final_particles.csv`, is the final-generation
+particle set with random-forest weights. The sampler omits the proposal-density
+correction, so the weights are not calibrated posterior probabilities.
 
 ### 3.1 Generate ARCADE input bundles
 

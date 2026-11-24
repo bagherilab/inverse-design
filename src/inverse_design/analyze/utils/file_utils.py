@@ -1,5 +1,7 @@
 import os
+import re
 from functools import lru_cache
+from typing import Dict
 
 
 @lru_cache(maxsize=256)
@@ -32,10 +34,6 @@ def list_simulation_files(folder, suffix: str):
 
     folder = Path(folder)
     return [folder / name for name in _scan_folder(str(folder)) if name.endswith(suffix)]
-
-
-from typing import Dict
-import re
 
 
 class FileParser:

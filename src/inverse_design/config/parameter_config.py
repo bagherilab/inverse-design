@@ -124,6 +124,11 @@ PARAM_RANGES_MU_ONLY = {
     "NECROTIC_FRACTION": (0.0, 1.0),
     "ACCURACY": (0.0, 1.0),
     "AFFINITY": (0.5, 0.5),
+    # Restored 2026-11-23. The published mean-only run perturbed this parameter
+    # (its particles carry it in this column position, drawn from U(3, 10) as in
+    # PARAM_RANGES), but the key was missing from this dict, so the release CLI
+    # neither perturbed nor range-checked it.
+    "COMPRESSION_TOLERANCE": (3, 10),
     "SYNTHESIS_DURATION_MU": (500, 774),
     "SYNTHESIS_DURATION_SIGMA": (20, 20),
     "BASAL_ENERGY_MU": (0.0005, 0.0015),
